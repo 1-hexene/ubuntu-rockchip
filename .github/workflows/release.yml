@@ -3,6 +3,50 @@ run-name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      board:
+        description: "Select the board to build"
+        required: false
+        default: "nanopi-r6c"
+        type: choice
+        options:
+          - aio-3588l
+          - armsom-aim7
+          - armsom-sige5
+          - armsom-sige7
+          - armsom-w3
+          - indiedroid-nova
+          - lubancat-4
+          - mixtile-blade3
+          - mixtile-core3588e
+          - nanopc-t6
+          - nanopi-r6c
+          - nanopi-r6s
+          - orangepi-3b
+          - orangepi-5
+          - orangepi-5-max
+          - orangepi-5-plus
+          - orangepi-5-pro
+          - orangepi-5b
+          - orangepi-cm5
+          - radxa-cm5-io
+          - radxa-cm5-rpi-cm4-io
+          - radxa-nx5-io
+          - radxa-zero3
+          - roc-rk3588s-pc
+          - rock-5-itx
+          - rock-5a
+          - rock-5b
+          - rock-5b-plus
+          - rock-5c
+          - rock-5d
+          - turing-rk1
+      install_ros2:
+        description: "Install ROS 2?"
+        required: false
+        default: true
+        type: boolean
+
   schedule:
     - cron: "0 14 * * *"
 
@@ -68,6 +112,7 @@ jobs:
           python-is-python3 fdisk bc debhelper python3-pyelftools python3-setuptools \
           python3-distutils python3-pkg-resources swig libfdt-dev libpython3-dev dctrl-tools
 
+      
       - name: Build
         shell: bash
         run: sudo ./build.sh --suite=${{ matrix.suite }} --flavor=${{ matrix.flavor }} --rootfs-only --launchpad
@@ -127,6 +172,7 @@ jobs:
         exclude:
           - board: armsom-sige5
             suite: jammy
+
     steps:
       - name: Get more disk space
         uses: jlumbroso/free-disk-space@main
@@ -161,10 +207,39 @@ jobs:
           udev dosfstools uuid-runtime git-lfs device-tree-compiler python2 python3 \
           python-is-python3 fdisk bc debhelper python3-pyelftools python3-setuptools \
           python3-distutils python3-pkg-resources swig libfdt-dev libpython3-dev dctrl-tools
+      
+      - name: Install ROS 2
+        if: ${{ github.event.inputs.install_ros2 == 'true' || github.event_name == 'schedule' }}
+        shell: bash
+        run: |
+          if [ "${{ matrix.suite }}" == "jammy" ]; then
+            # Install ROS 2 Humble for Ubuntu 22.04
+            sudo apt-get install -y software-properties-common
+            sudo add-apt-repository universe
+            sudo apt update && sudo apt install curl -y
+            sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+            sudo sh -c 'echo "deb [signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(lsb_release -cs) main" > /etc/apt/sources.list.d/ros2.list'
+            sudo apt update
+            sudo apt install -y ros-humble-desktop
+          elif [ "${{ matrix.suite }}" == "noble" ]; then
+            # Install ROS 2 Rolling for Ubuntu 24.04
+            sudo apt-get install -y software-properties-common
+            sudo add-apt-repository universe
+            sudo apt update && sudo apt install curl -y
+            sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
+            sudo sh -c 'echo "deb [signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(lsb_release -cs) main" > /etc/apt/sources.list.d/ros2.list'
+            sudo apt update
+            sudo apt install -y ros-rolling-desktop
+          fi
 
       - name: Build
         shell: bash
-        run: sudo ./build.sh --board=${{ matrix.board }} --suite=${{ matrix.suite }} --flavor=${{ matrix.flavor }} --launchpad
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ "${{ github.event.inputs.board }}" != "" ]; then
+            sudo ./build.sh --board=${{ github.event.inputs.board }} --suite=${{ matrix.suite }} --flavor=${{ matrix.flavor }} --launchpad
+          else
+            sudo ./build.sh --board=${{ matrix.board }} --suite=${{ matrix.suite }} --flavor=${{ matrix.flavor }} --launchpad
+          fi
 
       - name: Upload
         if: needs.prepare_release.outputs.release_id != '' 
